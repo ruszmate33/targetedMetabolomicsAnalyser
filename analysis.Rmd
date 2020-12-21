@@ -1,0 +1,193 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: Mate Rusz
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+
+#load the functions for analysis
+source("C:/Users/admin/Google Drive/PhD/Protokoll/20191003/skripts/targetedMetabolomicsAnalyzer.R")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+#set working directory
+setwd("C:/Users/admin/Google Drive/PhD/Protokoll/workflowExercise/results")
+
+qc_RTborders_NEG <- read.csv("rtbordersN.csv", header=TRUE, dec=".", na.strings = na_vector)
+
+qc_RT_mean_NEG <- meanRTs(qc_RTborders_NEG)
+
+
+#import NEG and POS datasets
+na_vector = c('#N/A', '?^z', 'NaN', '?^z')
+metabolites_NEG_nM <- read.csv("absolute_amounts_nM_NEG.csv", header=TRUE, dec=".", na.strings = na_vector)
+metabolites_POS_nM <- read.csv("absolute_amounts_nM_POS.csv", header=TRUE, dec=".", na.strings = na_vector)
+LODs_pmol <- read.csv("LODs_pmol.csv", header=TRUE, dec=".", na.strings = na_vector)
+
+#apply transformations for dataset
+metabolites_pmol_NEG <- transformTable(metabolites_NEG_nM)
+metabolites_pmol_POS <- transformTable(metabolites_POS_nM)
+
+#add polarity to metabolites
+metabolites_pmol_NEG <- add_polarity(metabolites_pmol_NEG, "_NEG")
+metabolites_pmol_POS <- add_polarity(metabolites_pmol_POS, "_POS")
+
+#analyze QCs
+metabo_NEG_QCs <- analyseQCs(metabolites_pmol_NEG, "QC_2ndBatch")
+metabo_POS_QCs <- analyseQCs(metabolites_pmol_POS, "QC_2ndBatch")
+
+ggplot(metabo_NEG_QCs, aes(RSD)) +
+    geom_histogram(binwidth = 0.1) +
+    ggtitle(deparse(substitute(metabo_NEG_QCs)))
+
+ggplot(metabo_POS_QCs, aes(RSD)) +
+    geom_histogram(binwidth = 0.1) +
+    ggtitle(deparse(substitute(metabo_POS_QCs)))
+
+
+```
+
+
+```{r}
+#keep only low RSD metabolites in QC
+metabolites_pmol_NEG_cleaned <- removeHighRSD_metabolites(metabolites_pmol_NEG, levelRSD = 1, "QC_2ndBatch")
+metabolites_pmol_POS_cleaned <- removeHighRSD_metabolites(metabolites_pmol_POS, levelRSD =1, "QC_2ndBatch")
+
+metabolites_pmol_NEG_cleaned <-removeBelowLODs(metabolites_pmol_NEG_cleaned, QCs_df=metabo_NEG_QCs, LODs_df=LODs_pmol)
+metabolites_pmol_POS_cleaned <-removeBelowLODs(metabolites_pmol_POS_cleaned, QCs_df=metabo_POS_QCs, LODs_df=LODs_pmol)
+
+#neg <- c()
+#for (metabolite in names(metabolites_pmol_NEG_cleaned)) {
+#  print(strsplit(metabolite, split="_", fixed = TRUE)[1][1])
+  #neg <- c(strsplit(metabolite, split="_", fixed = TRUE)[[1]], neg)
+}
+
+
+
+
+```
+
+```{r}
+#merge Negative, Positive cleaned data
+metabolites_pmol_combined <- inner_join(metabolites_pmol_NEG_cleaned, metabolites_pmol_POS_cleaned, by="File.Name")
+
+
+#load protein data
+protein <- read.csv("protein.csv")
+#protein$protein <- as.numeric(protein$protein)
+#protein$File.Name <- as.character(protein$File.Name)
+ 
+
+metabolites_pmol_PER_protein <- normalizeByProtein(metabolites_pmol_combined, protein)
+
+
+#extract group labels from FileName and add to dataframe
+metabolites_pmol_combined <- addGroupColumn(metabolites_pmol_combined)
+metabolites_pmol_PER_protein <- addGroupColumn(metabolites_pmol_PER_protein)
+
+
+metabolites_pmol_combined <- orderColumnsByAlphabet(metabolites_pmol_combined)
+metabolites_pmol_PER_protein <- orderColumnsByAlphabet(metabolites_pmol_PER_protein)
+
+metaboAnalystDf_pmol <- makeMetaboAnalystCompatible(metabolites_pmol_combined)
+metaboAnalystDf_pmolPERprot <- makeMetaboAnalystCompatible(metabolites_pmol_PER_protein)
+
+metaboAnalystDf_pmol <- replaceNegativeWithNA(metaboAnalystDf_pmol)
+metaboAnalystDf_pmolPERprot <- replaceNegativeWithNA(metaboAnalystDf_pmolPERprot)
+
+
+#setwd("./MetaboAnalyst")
+write.csv(metaboAnalystDf, "test_pmol_POSNEG_clean.csv", row.names = FALSE)
+write.csv(metaboAnalystDf, "test_pmol_POSNEG_clean.csv", row.names = FALSE)
+
+library(MetaboAnalystR)
+mSet<-InitDataObjects("conc", "stat", FALSE)
+mSet<-Read.TextData(mSet, "test_pmol_POSNEG_clean.csv", "rowu", "disc");
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet);
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "NULL", "NULL", "AutoNorm", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_0_", "png", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_0_", "png", 72, width=NA)
+mSet<-PCA.Anal(mSet)
+mSet<-PlotPCAPairSummary(mSet, "pca_pair_0_", "png", 72, width=NA, 5)
+mSet<-PlotPCAScree(mSet, "pca_scree_0_", "png", 72, width=NA, 5)
+mSet<-PlotPCA2DScore(mSet, "pca_score2d_0_", "png", 600, width=NA, 1,2,0.95,0,0)
+mSet<-PlotPCALoading(mSet, "pca_loading_0_", "png", 72, width=NA, 1,2);
+mSet<-PlotPCABiplot(mSet, "pca_biplot_0_", "png", 72, width=NA, 1,2)
+mSet<-PlotPCA3DScoreImg(mSet, "pca_score3d_0_", "png", 72, width=NA, 1,2,3, 40)
+mSet<-PlotPCA3DLoading(mSet, "pca_loading3d_0_", "json", 1,2,3)
+#ONLY for 2 groups!
+#mSet<-Ttests.Anal(mSet, F, 0.05, FALSE, TRUE, FALSE) 
+#mSet<-PlotTT(mSet, "tt_0_", "png", 72, width=NA)
+#mSet<-Volcano.Anal(mSet, FALSE, 2.0, 0, 0.75,F, 0.1, TRUE, "raw")
+#mSet<-PlotVolcano(mSet, "volcano_0_",1, "png", 72, width=NA)
+
+```
+
+```{r}
+#keep only 2 groups for pairwise comparison
+pairWise <- metaboAnalystDf %>%
+  filter((Group == "Cntrl") | (Group == "H2O2"))
+         
+         
+         
+#make pairwise comparison without NORMALIZATION
+#setwd("C:/Users/admin/Google Drive/PhD/Protokoll/20191003/results/MetaboAnalyst")
+dir.create("C:/Users/admin/Google Drive/PhD/Protokoll/20191003/results/MetaboAnalyst/pairwiseComparison")
+setwd("C:/Users/admin/Google Drive/PhD/Protokoll/20191003/results/MetaboAnalyst/pairwiseComparison")
+write.csv(pairWise, "20191003_pmol_POSNEG_pairwise.csv", row.names = FALSE)
+mSet<-InitDataObjects("conc", "stat", FALSE)
+mSet<-Read.TextData(mSet, "20191003_pmol_POSNEG_pairwise.csv", "rowu", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "NULL", "NULL", "NULL", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_0_", "png", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_0_", "png", 72, width=NA)
+
+
+# plot all metabolites in boxplots
+
+i = 0
+#for (metabolite in (names(metaboAnalystDf)[3:length(metaboAnalystDf)])) {
+#for (metabolite in mSet$dataSet$cmpd) {
+for (metabolite in mSet$dataSet$orig.var.nms) {
+  metabolites <- c()
+}
+ 
+  #metabolite <- paste('"', metabolite, '"', sep = "")
+ 
+  print(metabolite)
+  tryCatch(
+  i <- PlotCmpdView(mSet, metabolite, "png", 72, width=NA))
+  i <- i + 1
+  
+}
+
+#adj P-value < 0.05 & FC
+mSet<-Volcano.Anal(mSet, FALSE, 1.0, 1, 0.75,F, 0.05, TRUE, "fdr")
+mSet<-PlotVolcano(mSet, "volcano_0_adjP005",1, "png", 72, width=NA)
+
+#adj P-value < 0.05 & FC
+mSet<-Volcano.Anal(mSet, FALSE, 2.0, 1, 0.75,F, 0.05, TRUE, "fdr")
+mSet<-PlotVolcano(mSet, "volcano_1_adjP005_FC2",1, "png", 72, width=NA)
+
+#adj-P-value < 0.05
+mSet<-Ttests.Anal(mSet, F, 0.05, FALSE, TRUE, FALSE)
+mSet<-PlotTT(mSet, "tt_0_", "png", 72, width=NA)
+
+
+
+```
+
