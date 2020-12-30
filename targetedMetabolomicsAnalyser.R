@@ -153,6 +153,11 @@ extractFirstLettersAsLabel <- function(df) {
   return(newLabels)
 }
 
+removeMetabolites <- function(metabolitesDF, metabolitesToRemove) {
+  reducedMetabolitesDF <- metabolitesDF[, !(names(metabolitesDF) %in% metabolitesToRemove)]
+  return(reducedMetabolitesDF)
+}
+
 extractSpecialLabel <- function(df) {
   #extract group labels from FileName to a vector
   labels <- substring(df$File.Name, 1, 1)
@@ -162,12 +167,30 @@ extractSpecialLabel <- function(df) {
   
   newLabels <- c()
   for (label in labels) {
-    label <- paste(label[1], "_", label[2], "_", label[3], sep = "")
+    #label <- paste(label[1], "_", label[2], "_", label[3], sep = "")
+    label <- paste(label[1], "_", label[2], sep = "")
     newLabels <- c(newLabels, label)
   }
   
   return(newLabels)
 }
+
+extractWithoutThirdLabel <- function(df) {
+  #extract group labels from FileName to a vector
+  labels <- substring(df$File.Name, 1, 1)
+  
+  #extract group labels from FileName and add to dataframe
+  labels <- strsplit(df$File.Name, "_")
+  
+  newLabels <- c()
+  for (label in labels) {
+    label <- paste(label[1], "_", label[2], "_", label[4], sep = "")
+    newLabels <- c(newLabels, label)
+  }
+  
+  return(newLabels)
+}
+
 
 addGroupColumn <- function(pmolDF) {
   newLabels <- extractSpecialLabel(pmolDF)
