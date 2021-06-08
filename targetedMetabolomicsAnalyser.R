@@ -5,9 +5,17 @@ library(readxl)
 library(ggplot2)
 library(stringr)
 library(data.table) #newly added
+#library('ggpmisc')
+#install.packages(sigr)
 
 ##################################################################################################################################################
 #FUNCTIONS
+
+plotQC_histo <- function(QCdf, binwidth = 0.1) {
+  ggplot(QCdf, aes(RSD)) +
+    geom_histogram(binwidth) +
+    ggtitle(deparse(substitute(QCdf)))
+}
 
 meanRTs <- function(retentionTimeDF) {
   retentionTimeDF %>%
@@ -37,6 +45,29 @@ transformTable <- function(df, nMtoPmolFactor = 0.2) {
   return(metabolites_wide_pmol)
 }
 
+# clean this up
+transformTableArea <- function(df, nMtoPmolFactor = 0.2) {
+  #calc conc to numeric
+  df$Area <- as.numeric(df$Area) 
+  #filter for C12 data
+  df <- df %>%
+    select(c( "Precursor.Ion.Name","File.Name", "Area", "Isotope.Label.Type")) %>%
+    filter(Isotope.Label.Type == "light") %>%
+    select(c( "Precursor.Ion.Name","File.Name", "Area"))
+  #calculate absolute pmol from nM
+  df$Calculated.Concentration <- nMtoPmolFactor * df$Area
+  #remove .raw from Filename
+  df$File.Name <- str_replace_all(df$File.Name, ".raw", "")
+  #wide format 
+  df <- reshape2::dcast(df, File.Name ~ Precursor.Ion.Name, fun.aggregate = mean)
+  #remove blanks
+  metabolites_wide_pmol <- df %>%
+    filter(!str_detect(df$File.Name, "Blank"))
+  return(metabolites_wide_pmol)
+}
+
+
+
 #append polarity to the name of the metabolites
 add_polarity <- function(df, polarity) {
   names(df) <- paste(names(df), polarity, sep = "")
@@ -55,7 +86,7 @@ analyseQCs <- function(df, QCnameSTR) {
   
   QCsRSD <- molten_QC %>%
     group_by(metabolite) %>% 
-    summarize(pmol_mean = mean(pmol, na.rm = TRUE), RSD=sd(pmol, na.rm = TRUE)/abs(mean(pmol, na.rm = TRUE))) 
+    summarize(pmol_mean = mean(pmol, na.rm = TRUE), RSD=sd(pmol, na.rm = TRUE)/abs(mean(pmol, na.rm = TRUE)), N=n()) 
   
   
   
@@ -90,7 +121,7 @@ removeBelowLODs <- function(df, QCs_df, LODs_df) {
   LOD_df <- as.data.table(LODs_df)
   
   #join on metabolites
-  QC_LOD <- QCs_df[LODs_pmol, on = .(metabolite)]
+  QC_LOD <- QCs_df[LODs_df, on = .(metabolite)]
   QC_LOD <- na.omit(QC_LOD)
   
   #keep only above LOD metabolites or no LOD determined
@@ -158,7 +189,7 @@ removeMetabolites <- function(metabolitesDF, metabolitesToRemove) {
   return(reducedMetabolitesDF)
 }
 
-extractSpecialLabel <- function(df) {
+extractSpecialLabel <- function(df, parts=3) {
   #extract group labels from FileName to a vector
   labels <- substring(df$File.Name, 1, 1)
   
@@ -167,12 +198,27 @@ extractSpecialLabel <- function(df) {
   
   newLabels <- c()
   for (label in labels) {
-    #label <- paste(label[1], "_", label[2], "_", label[3], sep = "")
-    label <- paste(label[1], "_", label[2], sep = "")
+    if (parts == 3) {
+      label <- paste(label[1], "_", label[2], "_", label[3], sep = "")
+    } else if (parts == 2) {
+      label <- paste(label[1], "_", label[2], sep = "")
+    }
     newLabels <- c(newLabels, label)
   }
   
   return(newLabels)
+}
+
+getNumUniqueMetabolites <- function(df) {
+  df <- df[,3:ncol(df)]
+  nameMetabolites <- c()
+  metabolites <- strsplit(names(df), "_")
+  for (metabolite in metabolites) {
+    nameMetabolites <- c(nameMetabolites, metabolite)
+  }
+  uniqueMetabolites <- unique(nameMetabolites)
+  print(uniqueMetabolites)
+  return(length(uniqueMetabolites))
 }
 
 extractWithoutThirdLabel <- function(df) {
