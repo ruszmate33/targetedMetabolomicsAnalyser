@@ -10,8 +10,9 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 
 ```{r}
 
-#load the functions for analysis
-source("C:/Users/admin/Google Drive/PhD/Protokoll/20191003/skripts/targetedMetabolomicsAnalyzer.R")
+# load the functions for analysis
+# https://github.com/Koellensperger-Lab/targetedMetabolomicsAnalyzer.git
+source("C:/Users/admin/Documents/targetedMetabolomicsAnalyser/targetedMetabolomicsAnalyser.R")
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
@@ -21,30 +22,61 @@ When you save the notebook, an HTML file containing the code and output will be 
 The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
 ```{r}
 #set working directory
-setwd("C:/Users/admin/Google Drive/PhD/Protokoll/workflowExercise/results")
+setwd("C:/Users/admin/Google Drive/PhD/Protokoll/20200205_Pt_Coenzymes_Metabolites_CopyYasin/results")
 
-qc_RTborders_NEG <- read.csv("rtbordersN.csv", header=TRUE, dec=".", na.strings = na_vector)
+na_vector = c('#N/A', '?^z', 'NaN', '?^z')
 
-qc_RT_mean_NEG <- meanRTs(qc_RTborders_NEG)
-
+# Reteintion Time Ananlysis
+  # qc_RTborders_NEG <- read.csv("rtboarders_NEG.csv", header=TRUE, dec=".", na.strings = na_vector)
+  # qc_RTborders_POS <- read.csv("rtboarders_POS.csv", header=TRUE, dec=".", na.strings = na_vector)
+  # #library(readr)
+  # #rtboarders_POS <- read_csv("rtboarders_POS.csv")
+  # 
+  # qc_RT_mean_NEG <- meanRTs(qc_RTborders_NEG)
+  # qc_RT_mean_POS <- meanRTs(qc_RTborders_POS)
+  # 
+  # write.csv(qc_RT_mean_NEG, "negativeRTs.csv", row.names = FALSE)
+  # write.csv(qc_RT_mean_POS, "positiveRTs.csv", row.names = FALSE)
 
 #import NEG and POS datasets
-na_vector = c('#N/A', '?^z', 'NaN', '?^z')
-metabolites_NEG_nM <- read.csv("absolute_amounts_nM_NEG.csv", header=TRUE, dec=".", na.strings = na_vector)
-metabolites_POS_nM <- read.csv("absolute_amounts_nM_POS.csv", header=TRUE, dec=".", na.strings = na_vector)
+metabolites_NEG_nM <- read.csv("absolute amounts_metabolitesNEG.csv", header=TRUE, dec=".", na.strings = na_vector)
+metabolites_POS_nM <- read.csv("absolute amounts_metabolitesPOS.csv", header=TRUE, dec=".", na.strings = na_vector)
+coA_NEG_nM <- read.csv("absolute amounts_coenzymesNEG.csv", header=TRUE, dec=".", na.strings = na_vector)
+Carn_nM <- read.csv("absolute amounts_carnitinesPOS.csv", header=TRUE, dec=".", na.strings = na_vector)
+
+
+# LODs
 LODs_pmol <- read.csv("LODs_pmol.csv", header=TRUE, dec=".", na.strings = na_vector)
 
 #apply transformations for dataset
-metabolites_pmol_NEG <- transformTable(metabolites_NEG_nM)
-metabolites_pmol_POS <- transformTable(metabolites_POS_nM)
+metabolites_pmol_NEG <- transformTable(metabolites_NEG_nM, 0.05) #extra 4x dilution of calibration for metabolites
+metabolites_pmol_POS <- transformTable(metabolites_POS_nM, 0.05)
+coA_pmol_NEG <- transformTable(coA_NEG_nM, 0.2) #default conversion, amount in nM in 200 µL (x 0.2)
+Carn_pmol <- transformTable(Carn_nM, 0.2)
+
+#list of metabos to remove from manual inspection and peaks
+to_removeNEG <- c("1-Methylnicotinamide", "2-Carbamoylamino-butanedioic acid", "2-Deoxycytidine", "Adenine",  "Adenosine", "cAMP", "cGMP",  "Citrulline",  "CMP", "Cystine", "Cytidine",  "Cytosine",  "dAMP", "dATP" , "dCMP", "Dihydroxyisovalerate",  "Erythrose-4-phosphate", "Glycine", "Guanidineacetic acid", "Guanosine", "IMP", "Kynurenine", "Melatonine", "Mevalonic acid", "N4-Acetylcytidine", "Octopamine", "Oxaloacetic acid", "Pseudouridine",  "S-Adenosyl-homocysteine", "S-Adenosyl-methionine", "Seleno-methionine", "Thymidine", "Thymine", "Trehalose", "Uracil", "Uridine")
+to_removePOS <- c("1-Methylnicotinamide", "2-Carbamoylamino-butanedioic acid", "2-Deoxyuridine", "3-Methyl-2-oxovaleric acid", "5-Methyluridine", "6-Phosphogluconate", "cAMP", "Cysteic acid", "Cystine", "Cytidine",  "dAMP", "dCMP", "dCTP", "dGTP", "Glutamyl-cysteine", "Homocysteine", "IMP", "Seleno-methionine", "Thymidine", "Thymine" )
+
+#remove manually inspected bad peaks
+metabolites_pmol_NEG <- removeMetabolites(metabolites_pmol_NEG, to_removeNEG) # 125 -> 85 variables
+metabolites_pmol_POS <- removeMetabolites(metabolites_pmol_POS, to_removePOS) # 93 -> 73 variables
+# got this far
+
 
 #add polarity to metabolites
 metabolites_pmol_NEG <- add_polarity(metabolites_pmol_NEG, "_NEG")
 metabolites_pmol_POS <- add_polarity(metabolites_pmol_POS, "_POS")
 
+#remove QC outliers
+#metabolites_pmol_NEG <- metabolites_pmol_NEG[-c(41),] #outlier "Qcpool_NEG_Metabo_20200202032528"
+metabolites_pmol_POS <- metabolites_pmol_POS[-c(37), ] #Qcpool_Metabolites_POS_20200207074905
+
 #analyze QCs
-metabo_NEG_QCs <- analyseQCs(metabolites_pmol_NEG, "QC_2ndBatch")
-metabo_POS_QCs <- analyseQCs(metabolites_pmol_POS, "QC_2ndBatch")
+coA_QCs <- analyseQCs(coA_pmol_NEG, "Qcpool")
+metabo_NEG_QCs <- analyseQCs(metabolites_pmol_NEG, "Qcpool")
+metabo_POS_QCs <- analyseQCs(metabolites_pmol_POS, "Qcpool")
+Carn_QC <- analyseQCs(Carn_pmol, "Qcpool")
 
 ggplot(metabo_NEG_QCs, aes(RSD)) +
     geom_histogram(binwidth = 0.1) +
@@ -54,61 +86,144 @@ ggplot(metabo_POS_QCs, aes(RSD)) +
     geom_histogram(binwidth = 0.1) +
     ggtitle(deparse(substitute(metabo_POS_QCs)))
 
+#check thiols as NEM-derivatized and CoAs
+posThiols <- metabo_POS_QCs %>%
+  filter(str_detect(metabo_POS_QCs$metabolite, "NEM"))
+negThiols <- metabo_NEG_QCs %>%
+  filter(str_detect(metabo_NEG_QCs$metabolite, "NEM"))
 
+thiols <- rbind(coA_QCs, posThiols, negThiols)
+
+#plotQC_histo(metabo_NEG_QCs)
+#plotQC_histo(metabo_POS_QCs)
 ```
 
 
 ```{r}
-#keep only low RSD metabolites in QC
-metabolites_pmol_NEG_cleaned <- removeHighRSD_metabolites(metabolites_pmol_NEG, levelRSD = 1, "QC_2ndBatch")
-metabolites_pmol_POS_cleaned <- removeHighRSD_metabolites(metabolites_pmol_POS, levelRSD =1, "QC_2ndBatch")
+#keep only low RSD metabolites in QC (remove 0 RSD analytes too)
+metabolites_pmol_NEG_cleaned <- removeHighRSD_metabolites(metabolites_pmol_NEG, levelRSD = 0.3, "Qcpool") #89 -> 64
+metabolites_pmol_POS_cleaned <- removeHighRSD_metabolites(metabolites_pmol_POS, levelRSD = 0.3, "Qcpool") #73 -> 65
+coA_pmol_NEG_cleaned <- removeHighRSD_metabolites(coA_pmol_NEG, levelRSD = 0.3, "Qcpool") #4 -> 3 (MalCoA out)
 
-metabolites_pmol_NEG_cleaned <-removeBelowLODs(metabolites_pmol_NEG_cleaned, QCs_df=metabo_NEG_QCs, LODs_df=LODs_pmol)
-metabolites_pmol_POS_cleaned <-removeBelowLODs(metabolites_pmol_POS_cleaned, QCs_df=metabo_POS_QCs, LODs_df=LODs_pmol)
+#keep only metabolites above LOD in QC
+metabolites_pmol_NEG_cleaned <- removeBelowLODs(metabolites_pmol_NEG_cleaned, metabo_NEG_QCs, LODs_pmol) # 64 -> 55
+metabolites_pmol_POS_cleaned <- removeBelowLODs(metabolites_pmol_POS_cleaned, metabo_POS_QCs, LODs_pmol) # 65 -> 51
+#for coenzymes no LODs are avaliable
 
-#neg <- c()
-#for (metabolite in names(metabolites_pmol_NEG_cleaned)) {
-#  print(strsplit(metabolite, split="_", fixed = TRUE)[1][1])
-  #neg <- c(strsplit(metabolite, split="_", fixed = TRUE)[[1]], neg)
-}
+#check QC clustering in each 3 batch
+#write.csv(metabolites_pmol_NEG_cleaned, "metabolites_pmol_NEG_cleaned.csv", row.names = FALSE)
+#write.csv(metabolites_pmol_POS_cleaned, "metabolites_pmol_POS_cleaned.csv", row.names = FALSE)
+#write.csv(coA_pmol_NEG_cleaned, "coA_pmol_NEG_cleaned.csv", row.names = FALSE)
 
-
-
-
+# remove all NEM derivatized metabolites
+#  metabolitesToRemove <- c("Glutathione,reduced")
+#  removeMetabolites(metabolitesDF, metabolitesToRemove)
+# RSD filter removed these already
+  
 ```
 
 ```{r}
-#merge Negative, Positive cleaned data
+#merge Negative, Positive and CoA, AcCarnitine, PalmCarn data
 metabolites_pmol_combined <- inner_join(metabolites_pmol_NEG_cleaned, metabolites_pmol_POS_cleaned, by="File.Name")
+metabolites_pmol_combined <- inner_join(metabolites_pmol_combined, Carn_pmol, by="File.Name")
+metabolites_coAs_pmol <- inner_join(metabolites_pmol_combined, coA_pmol_NEG_cleaned, by="File.Name")
 
-
-#load protein data
+#load and normalize by protein data
 protein <- read.csv("protein.csv")
-#protein$protein <- as.numeric(protein$protein)
-#protein$File.Name <- as.character(protein$File.Name)
- 
-
-metabolites_pmol_PER_protein <- normalizeByProtein(metabolites_pmol_combined, protein)
-
+metabolites_coAs_pmol_PER_protein <- normalizeByProtein(metabolites_coAs_pmol, protein)
 
 #extract group labels from FileName and add to dataframe
-metabolites_pmol_combined <- addGroupColumn(metabolites_pmol_combined)
-metabolites_pmol_PER_protein <- addGroupColumn(metabolites_pmol_PER_protein)
+labels <- extractSpecialLabel(metabolites_coAs_pmol_PER_protein, parts=2)
+metabolites_coAs_pmol_PER_protein$Group <- labels
+
+#order columns alphabetically
+metabolites_coAs_pmol_PER_protein <- orderColumnsByAlphabet(metabolites_coAs_pmol_PER_protein)
+
+#put File.Name and Group in front
+metabolites_coAs_pmol_PER_protein <- makeMetaboAnalystCompatible(metabolites_coAs_pmol_PER_protein)
+write.csv(metabolites_coAs_pmol_PER_protein, "metabolites_CoA_pmolPERprotein_goodCal.csv", row.names = FALSE)
+```
 
 
-metabolites_pmol_combined <- orderColumnsByAlphabet(metabolites_pmol_combined)
-metabolites_pmol_PER_protein <- orderColumnsByAlphabet(metabolites_pmol_PER_protein)
 
-metaboAnalystDf_pmol <- makeMetaboAnalystCompatible(metabolites_pmol_combined)
-metaboAnalystDf_pmolPERprot <- makeMetaboAnalystCompatible(metabolites_pmol_PER_protein)
+```{r}
+# dataset with unque metabolites
+newNames <- names(metabolites_pmol_NEG_cleaned) %>%
+  str_replace("_NEG", "")
+names(metabolites_pmol_NEG_cleaned) <- newNames
 
-metaboAnalystDf_pmol <- replaceNegativeWithNA(metaboAnalystDf_pmol)
-metaboAnalystDf_pmolPERprot <- replaceNegativeWithNA(metaboAnalystDf_pmolPERprot)
+newNames <- names(metabolites_pmol_POS_cleaned) %>%
+  str_replace("_POS", "")
+names(metabolites_pmol_POS_cleaned) <- newNames
+
+#removePolarity <- function(df, pol) {
+#  newNames <- names(df) %>%
+#  str_replace("pol", "")
+#  names(df) <- newNames
+#  return(df)
+#}
+
+# get all metabolites from NEG polaty plus the ones which only work in POS
+onlyInPOS <- setdiff(names(metabolites_pmol_POS_cleaned), names(metabolites_pmol_NEG_cleaned))
+colsFromPOS <- c("File.Name", onlyInPOS)
+extraPOSdf <- metabolites_pmol_POS_cleaned[, (names(metabolites_pmol_POS_cleaned) %in% colsFromPOS)]
+metabolites_pmol_combined_unique <- inner_join(metabolites_pmol_NEG_cleaned, extraPOSdf, by="File.Name")
+metabolites_pmol_combined_unique <- inner_join(metabolites_pmol_combined_unique, Carn_pmol,by="File.Name")
+metabolites_pmol_combined_unique <- inner_join(metabolites_pmol_combined_unique, coA_pmol_NEG_cleaned,by="File.Name")
+
+#normalize by protein
+metabolites_pmol_combined_unique_PER_protein <- normalizeByProtein(metabolites_pmol_combined_unique, protein)
+
+#extract group labels from FileName and add to dataframe
+labels <- extractSpecialLabel(metabolites_pmol_combined_unique_PER_protein, parts=2)
+metabolites_pmol_combined_unique_PER_protein$Group <- labels
 
 
-#setwd("./MetaboAnalyst")
-write.csv(metaboAnalystDf, "test_pmol_POSNEG_clean.csv", row.names = FALSE)
-write.csv(metaboAnalystDf, "test_pmol_POSNEG_clean.csv", row.names = FALSE)
+#order columns alphabetically
+metabolites_pmol_combined_unique_PER_protein <- orderColumnsByAlphabet(metabolites_pmol_combined_unique_PER_protein)
+
+#put File.Name and Group in front
+metabolites_pmol_combined_unique_PER_protein <- makeMetaboAnalystCompatible(metabolites_pmol_combined_unique_PER_protein)
+write.csv(metabolites_pmol_combined_unique_PER_protein, "metabolites_pmol_combined_unique_PER_protein_goodCal.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+# calculate biological repeatability
+getRSD_DF <- function(df, subgroup1, subgroup2) {
+  rsd_df <- df %>%
+  reshape2::melt(id = c("File.Name", "Group"), variable.name = "metabolite", value.name = "pmol") %>%
+  filter(Group %in% c(subgroup1, subgroup2)) %>%
+  group_by(metabolite, Group) %>% 
+  summarize(pmol_mean = mean(pmol, na.rm = TRUE), RSD=sd(pmol, na.rm = TRUE)/abs(mean(pmol, na.rm = TRUE)), N=n()) 
+}
+
+calcBiologicalRepeatability <- function(df, subgroup) {
+  rsd_DF <- getRSD_DF(df, "Cntrl", "H2O2")
+  rsd_DF %>%
+  filter(Group == subgroup & RSD != 0)
+}
+
+rsd_df <- getRSD_DF(metabolites_pmol_combined, "Cntrl", "H2O2")
+
+h2o2_RSDs <- calcBiologicalRepeatability(metabolites_pmol_combined, "H2O2")
+cntrl_RSDs <- calcBiologicalRepeatability(metabolites_pmol_combined, "Cntrl")
+
+
+mean(cntrl_RSDs$RSD) 
+median(cntrl_RSDs$RSD)
+mean(h2o2_RSDs$RSD)
+median(h2o2_RSDs$RSD)
+mean(rsd_df$RSD, na.rm = TRUE)
+median(rsd_df$RSD, na.rm = TRUE)
+
+setwd("C:/Users/admin/Google Drive/PhD/Protokoll/20191003_reprocessedData/results")
+pValues <- read.csv("t_test.csv", header=TRUE, dec=".", na.strings = na_vector)
+foldChanges <- read.csv("fold_change_all.csv", header=TRUE, dec=".", na.strings = na_vector)
+pValueFC <- inner_join(foldChanges, pValues, by="Metabolite")
+write.csv(pValueFC, "foldChanges_P-values.csv", row.names = FALSE)
+
 
 library(MetaboAnalystR)
 mSet<-InitDataObjects("conc", "stat", FALSE)
